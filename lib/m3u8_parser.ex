@@ -10,7 +10,6 @@ defmodule M3u8Parser do
         IO.stream(f, :line)
         |> Enum.reduce(%{state: nil}, fn line, acc -> do_parse(acc, line) end)
         |> validate_done!
-        |> Map.get(:segments)
       end)
     res
   end
