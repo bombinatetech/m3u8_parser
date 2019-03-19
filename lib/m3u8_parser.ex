@@ -20,22 +20,42 @@ defmodule M3u8Parser do
   defp do_parse(%{state: :done}, _line), do: raise "Unexpected state! Already reached end of M3U8"
   defp do_parse(acc = %{state: nil}, line) do
     cond do
-      is_match?(line, "#EXTM3U") -> put_in(acc[:state], :top)
+      is_match?(line, "#EXTM3U") -> 
+        IO.inspect("putting things on top: #{inspect(acc)}")
+        put_in(acc[:state], :top)
     end
   end
   defp do_parse(acc = %{state: :top}, line) do
     cond do
-      is_match?(line, "#EXTINF")          -> parse_extinf(acc, line)
-      is_match?(line, "#EXT-X-BYTERANGE") -> parse_byterange(acc, line)
-      is_match?(line, "#EXT-X-ENDLIST")   -> put_in(acc[:state], :done)
+      is_match?(line, "#EXTINF")          -> 
+        IO.inspect("starting top parse: #{inspect({acc, line})}")
+        parse_extinf(acc, line)
+      is_end_match?(line, ".ts")          -> 
+        IO.inspect("starting top title parse: #{inspect({acc, line})}")
+        parse_segment_file(acc, line)
+      is_match?(line, "#EXT-X-BYTERANGE") -> 
+        IO.inspect("parsing byte range: #{inspect({acc, line})}")
+        parse_byterange(acc, line)
+      is_match?(line, "#EXT-X-ENDLIST")   -> 
+        IO.inspect("done parse: #{inspect({acc, line})}")
+        put_in(acc[:state], :done)
       is_match?(line, "#")                -> acc # ignore other tags and comments
     end
   end
   defp do_parse(acc = %{state: :defsegment}, line) do
     cond do
-      is_match?(line, "#EXTINF")          -> parse_extinf(acc, line)
-      is_match?(line, "#EXT-X-BYTERANGE") -> parse_byterange(acc, line)
-      is_match?(line, "#EXT-X-ENDLIST")   -> put_in(acc[:state], :done)
+      is_match?(line, "#EXTINF")          -> 
+        IO.inspect("defsegment parse: #{inspect({acc, line})}")
+        parse_extinf(acc, line)
+      is_end_match?(line, ".ts")          -> 
+        IO.inspect("starting line parse: #{inspect({acc, line})}")
+        parse_segment_file(acc, line)
+      is_match?(line, "#EXT-X-BYTERANGE") -> 
+        IO.inspect("defsegment byterange parse: #{inspect({acc, line})}")
+        parse_byterange(acc, line)
+      is_match?(line, "#EXT-X-ENDLIST")   -> 
+        IO.inspect("defsegment done: #{inspect({acc, line})}")
+        put_in(acc[:state], :done)
       is_match?(line, "#")                -> acc # ignore other tags and comments
       true                                -> compile_segment_and_go_to_top(acc) # we saw a URI
     end
@@ -53,6 +73,10 @@ defmodule M3u8Parser do
     {duration, _} = Float.parse(duration)
     title = trim_trailing_new_line(title)
     {duration, title}
+  end
+
+  def parse_segment_file(acc, line) do
+    pend(acc, title: trim_trailing_new_line(line))
   end
 
   def parse_byterange(acc, line) do
@@ -83,6 +107,8 @@ defmodule M3u8Parser do
   end
 
   defp is_match?(line, match), do: String.starts_with?(line, match)
+
+  defp is_end_match?(line, match), do: String.ends_with?(trim_trailing_new_line(line), match)
 
   defp pend(acc, keyword) do
     update_in(acc[:pending], fn pend -> (pend || []) ++ keyword end)
